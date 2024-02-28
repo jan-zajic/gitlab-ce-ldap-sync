@@ -1638,11 +1638,12 @@ class LdapSyncCommand extends Command
                 }
 
 				$descriptionMatches = false;
-				if (isset($gitlabGroup["description"]) && str_starts_with(trim(gitlabGroup["description"]), 'gitlab-ce-ldap-sync')) {
+				if (isset($gitlabGroup["description"]) && str_starts_with(trim($gitlabGroup["description"]), 'gitlab-ce-ldap-sync')) {
 					$descriptionMatches = true;
 				}
 
 				if(!$descriptionMatches && $config["gitlab"]["options"]["ignoreOtherGitlabGroups"]) {
+					$this->logger?->warning(sprintf("Skipping non-matched Gitlab group %d \"%s\" [%s].", $gitlabGroupId, $gitlabGroupName, $gitlabGroupPath));
 					continue;
 				}
 

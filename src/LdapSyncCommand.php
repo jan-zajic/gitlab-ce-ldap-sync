@@ -60,6 +60,7 @@ use Cocur\Slugify\Slugify;
  *          groupNamesToIgnore: string[],
  *          createEmptyGroups: bool,
  *          deleteExtraGroups: bool,
+ *          ignoreOtherGitlabGroups: bool,
  *          newMemberAccessLevel: int,
  *          groupNamesOfAdministrators: string[],
  *          groupNamesOfExternal: string[],
@@ -734,6 +735,16 @@ class LdapSyncCommand extends Command
                     $config["gitlab"]["options"]["deleteExtraGroups"] = false;
                 } elseif (!is_bool($config["gitlab"]["options"]["deleteExtraGroups"])) {
                     $addProblem("error", "gitlab->options->deleteExtraGroups is not a boolean.");
+                }
+
+				if (!isset($config["gitlab"]["options"]["ignoreOtherGitlabGroups"])) {
+                    $addProblem("warning", "gitlab->options->ignoreOtherGitlabGroups missing. (Assuming false.)");
+                    $config["gitlab"]["options"]["ignoreOtherGitlabGroups"] = false;
+                } elseif ("" === $config["gitlab"]["options"]["ignoreOtherGitlabGroups"]) {
+                    $addProblem("warning", "gitlab->options->ignoreOtherGitlabGroups not specified. (Assuming false.)");
+                    $config["gitlab"]["options"]["ignoreOtherGitlabGroups"] = false;
+                } elseif (!is_bool($config["gitlab"]["options"]["ignoreOtherGitlabGroups"])) {
+                    $addProblem("error", "gitlab->options->ignoreOtherGitlabGroups is not a boolean.");
                 }
 
                 if (!isset($config["gitlab"]["options"]["newMemberAccessLevel"])) {
@@ -1626,6 +1637,15 @@ class LdapSyncCommand extends Command
                     continue;
                 }
 
+				$descriptionMatches = false;
+				if (isset($gitlabGroup["description"]) && str_starts_with(trim(gitlabGroup["description"]), 'gitlab-ce-ldap-sync')) {
+					$descriptionMatches = true;
+				}
+
+				if(!$descriptionMatches && $config["gitlab"]["options"]["ignoreOtherGitlabGroups"]) {
+					continue;
+				}
+
                 $this->logger?->info(sprintf("Found Gitlab group #%d \"%s\" [%s].", $gitlabGroupId, $gitlabGroupName, $gitlabGroupPath));
                 if (isset($groupsSync["found"][$gitlabGroupId]) || $this->in_array_i($gitlabGroupName, $groupsSync["found"])) {
                     $this->logger?->warning(sprintf("Duplicate Gitlab group %d \"%s\" [%s].", $gitlabGroupId, $gitlabGroupName, $gitlabGroupPath));
@@ -1672,7 +1692,9 @@ class LdapSyncCommand extends Command
             $gitlabGroup = null;
 
             /** @var GitlabGroupArray|null $gitlabUser */
-            !$this->dryRun ? ($gitlabGroup = $gitlab->groups()->create($gitlabGroupName, $gitlabGroupPath)) : $this->logger?->warning("Operation skipped due to dry run.");
+            !$this->dryRun ? ($gitlabGroup = $gitlab->groups()->create($gitlabGroupName, $gitlabGroupPath, [
+				'description' => 'gitlab-ce-ldap-sync ' . $ldapGroupName
+			])) : $this->logger?->warning("Operation skipped due to dry run.");
 
             $gitlabGroupId = (is_array($gitlabGroup) && isset($gitlabGroup["id"]) && is_int($gitlabGroup["id"])) ? $gitlabGroup["id"] : sprintf("dry:%s", $gitlabGroupPath);
             $groupsSync["new"][$gitlabGroupId] = $gitlabGroupName;

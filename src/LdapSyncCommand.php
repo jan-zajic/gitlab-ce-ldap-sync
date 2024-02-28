@@ -1693,9 +1693,8 @@ class LdapSyncCommand extends Command
             $gitlabGroup = null;
 
             /** @var GitlabGroupArray|null $gitlabUser */
-            !$this->dryRun ? ($gitlabGroup = $gitlab->groups()->create($gitlabGroupName, $gitlabGroupPath, [
-				'description' => 'gitlab-ce-ldap-sync ' . $ldapGroupName
-			])) : $this->logger?->warning("Operation skipped due to dry run.");
+			$groupDescription = 'gitlab-ce-ldap-sync ' . $ldapGroupName;
+            !$this->dryRun ? ($gitlabGroup = $gitlab->groups()->create($gitlabGroupName, $gitlabGroupPath, $groupDescription)) : $this->logger?->warning("Operation skipped due to dry run.");
 
             $gitlabGroupId = (is_array($gitlabGroup) && isset($gitlabGroup["id"]) && is_int($gitlabGroup["id"])) ? $gitlabGroup["id"] : sprintf("dry:%s", $gitlabGroupPath);
             $groupsSync["new"][$gitlabGroupId] = $gitlabGroupName;

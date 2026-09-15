@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdamReece\GitLabCeLdapSync;
 
+use AdamReece\GitLabCeLdapSync\GitLabApi\Users as GitLabApiUsers;
 use Cocur\Slugify\Slugify;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -1578,7 +1579,9 @@ class LdapSyncCommand extends Command
         $this->logger?->notice("Finding all existing GitLab users...");
         $p = 0;
 
-        while (is_array($gitLabUsers = $gitLab->users()->all([
+        $gitLabUsersApi = new GitLabApiUsers($gitLab);
+
+        while (is_array($gitLabUsers = $gitLabUsersApi->allHumans([
             "page" => ++$p,
             "per_page" => 100,
         ])) && [] !== $gitLabUsers) {
@@ -1845,11 +1848,41 @@ class LdapSyncCommand extends Command
                 }
 
                 $this->logger?->warning(sprintf("Disabling GitLab user #%d \"%s\".", $gitLabUserId, $gitLabUserName));
-                /** @var GitLabUserArray|null $gitLabUser */
-                !$this->dryRun
-                    ? ($gitLabUser = $gitLab->users()->block($gitLabUserId))
-                    : $this->logger?->warning("Operation skipped due to dry run.")
-                ;
+
+                try {
+                    /** @var GitLabUserArray|null $gitLabUser */
+                    !$this->dryRun
+                        ? ($gitLabUser = $gitLab->users()->block($gitLabUserId))
+                        : $this->logger?->warning("Operation skipped due to dry run.")
+                    ;
+                } catch (\Exception $e) {
+                    // Permit continue when the user is internal, as GitLab won't allow those to be blocked. (Instances
+                    // older than 17.7 can't filter these out of the user listing, so they end up here instead.)
+                    if (false !== stripos($e->getMessage(), "internal user cannot be blocked")) {
+                        $this->logger?->info(sprintf(
+                            "GitLab user #%d \"%s\" is an internal user, ignoring.",
+                            $gitLabUserId,
+                            $gitLabUserName
+                        ));
+                        $this->gitLabApiCoolDown();
+                        continue;
+                    }
+
+                    $this->logger?->error(sprintf(
+                        "GitLab user #%d \"%s\" could not be disabled: %s",
+                        $gitLabUserId,
+                        $gitLabUserName,
+                        $e->getMessage()
+                    ), ["error" => $e]);
+
+                    if ($this->continueOnFail) {
+                        $this->gitLabApiCoolDown();
+                        continue;
+                    }
+
+                    throw $e;
+                }
+
                 /** @var GitLabUserArray|null $gitLabUser */
                 !$this->dryRun ? ($gitLabUser = $gitLab->users()->update($gitLabUserId, [
                     "admin"             => false,

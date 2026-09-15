@@ -244,6 +244,8 @@ userNamesToIgnore:
 
 User name "root" will always be ignored because this is the built-in GitLab root user. This tool will not attempt to create/delete/sync this user name.
 
+Bot users and internal users (such as the placeholder and import users created by the migration feature, named like "placeholder_*" and "import_user_*") are also always ignored, so they do not need to be listed here. GitLab 17.7 and later exclude these from the user listing entirely; on older instances they are skipped when GitLab refuses to block them.
+
 Default: *null*
 
 ##### groupNamesToIgnore *(array|null)*

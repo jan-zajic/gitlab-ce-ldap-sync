@@ -298,6 +298,21 @@ Beware that groups created before this setting existed do not have that descript
 
 Default: *false*
 
+##### legacyGroupNameSlugs *(bool|null)*
+
+Specify whether group names should be converted for GitLab the way they were before GitLab relaxed its naming rules.
+
+Group names and paths are derived from the directory group's name. GitLab used to allow letters and digits only, so every other character was replaced: with a space in the name, and with a dash in the path. Since then underscores, dots, parentheses, dashes and spaces became valid, hence they are now kept as they are. For example the directory group "CS_sales" becomes:
+
+| | Name | Path |
+|-|------|------|
+| Enabled | `CS sales` | `cs-sales` |
+| Disabled | `CS_sales` | `cs_sales` |
+
+Enable this if your GitLab instance still has groups named in the old style, as otherwise this tool will not recognise them and will create a second group for every directory group of which has such a character in its name.
+
+Default: *false*
+
 ##### newMemberAccessLevel *(integer|null)*
 
 The access level to provide users when added to groups.
@@ -401,6 +416,15 @@ php bin/console ldap:sync -v
 php bin/console ldap:sync -vv
 php bin/console ldap:sync -vvv
 ```
+
+If you have groups in GitLab of which this tool created before the "ignoreOtherGitlabGroups" setting existed they will not have the description this tool recognises its own groups by, so they'd be treated as manually created groups. The `--adoptExistingGroups` option gives that description to every existing GitLab group of which matches a directory group, keeping any description already there after it:
+
+```console
+php bin/console ldap:sync --adoptExistingGroups -d
+php bin/console ldap:sync --adoptExistingGroups
+```
+
+Run it with `-d` first to see exactly which groups would be adopted. This is only needed once, after which the option should be left off.
 
 If you'd like to only sync with a single GitLab instance you can specify the name of it as per your configuration as an argument, for example:
 

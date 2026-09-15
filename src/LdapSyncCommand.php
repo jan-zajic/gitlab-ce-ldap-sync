@@ -60,6 +60,7 @@ use Symfony\Component\Yaml\Yaml;
  *          createEmptyGroups: bool,
  *          deleteExtraGroups: bool,
  *          ignoreOtherGitlabGroups: bool,
+ *          legacyGroupNameSlugs: bool,
  *          newMemberAccessLevel: int,
  *          groupNamesOfAdministrators: non-empty-string[],
  *          groupNamesOfExternal: non-empty-string[],
@@ -212,6 +213,9 @@ class LdapSyncCommand extends Command
     /** @var bool Continue on failure: Do not abort on certain errors. */
     private bool $continueOnFail = false;
 
+    /** @var bool Adopt existing GitLab groups of which match a directory group. */
+    private bool $adoptExistingGroups = false;
+
     /** @var string Application root directory. */
     private string $rootDir = "";
 
@@ -239,6 +243,7 @@ class LdapSyncCommand extends Command
             ->setDescription("Sync LDAP users and groups with a GitLab CE/EE self-hosted installation.")
             ->addOption("dryrun", "d", InputOption::VALUE_NONE, "Dry run: Do not persist any changes.")
             ->addOption("continueOnFail", null, InputOption::VALUE_NONE, "Do not abort on certain errors. (Continue running if possible.)")
+            ->addOption("adoptExistingGroups", null, InputOption::VALUE_NONE, "Adopt existing GitLab groups of which match a directory group, by giving them the description this tool recognises its own groups by. (Only needed once, for groups created before gitlab->options->ignoreOtherGitlabGroups existed.)")
             ->addArgument("instance", InputArgument::OPTIONAL, "Sync with a specific instance, or leave unspecified to work with all.")
         ;
     }
@@ -264,6 +269,13 @@ class LdapSyncCommand extends Command
 
         if ($this->continueOnFail = boolval($input->getOption("continueOnFail"))) {
             $this->logger->warning("Continue on failure enabled: Certain errors will be ignored if possible.");
+        }
+
+        if ($this->adoptExistingGroups = boolval($input->getOption("adoptExistingGroups"))) {
+            $this->logger->warning(
+                "Adopt existing groups enabled: Existing GitLab groups matching a directory group will be described as"
+                    . " belonging to this tool."
+            );
         }
 
         $this->rootDir                  = sprintf("%s/../", __DIR__);
@@ -787,6 +799,16 @@ class LdapSyncCommand extends Command
                     $config["gitlab"]["options"]["ignoreOtherGitlabGroups"] = false;
                 } elseif (!is_bool($config["gitlab"]["options"]["ignoreOtherGitlabGroups"])) {
                     $addProblem("error", "gitlab->options->ignoreOtherGitlabGroups is not a boolean.");
+                }
+
+                if (!isset($config["gitlab"]["options"]["legacyGroupNameSlugs"])) {
+                    $addProblem("warning", "gitlab->options->legacyGroupNameSlugs missing. (Assuming false.)");
+                    $config["gitlab"]["options"]["legacyGroupNameSlugs"] = false;
+                } elseif ("" === $config["gitlab"]["options"]["legacyGroupNameSlugs"]) {
+                    $addProblem("warning", "gitlab->options->legacyGroupNameSlugs not specified. (Assuming false.)");
+                    $config["gitlab"]["options"]["legacyGroupNameSlugs"] = false;
+                } elseif (!is_bool($config["gitlab"]["options"]["legacyGroupNameSlugs"])) {
+                    $addProblem("error", "gitlab->options->legacyGroupNameSlugs is not a boolean.");
                 }
 
                 if (!isset($config["gitlab"]["options"]["newMemberAccessLevel"])) {
@@ -1520,19 +1542,39 @@ class LdapSyncCommand extends Command
     ): void {
         $this->output?->writeln(sprintf("Deploying users and groups to GitLab instance \"%s\"...", $gitLabInstance));
 
-        $slugifyGitLabName = new Slugify([
-            "regexp"        => "/([^A-Za-z0-9_\.\(\)\- ])+/",
-            "separator"     => "",
-            "lowercase"     => false,
-            "trim"          => true,
-        ]);
+        if ($config["gitlab"]["options"]["legacyGroupNameSlugs"]) {
+            // Slug patterns of before GitLab allowed underscores, dots, parentheses, and spaces in group names. Every
+            // character but a letter or a digit is replaced, so "CS_sales" becomes "CS sales" [cs-sales].
+            $this->logger?->notice("Using legacy group name slugs.");
 
-        $slugifyGitLabPath = new Slugify([
-            "regexp"        => "/([^A-Za-z0-9_\.\-])+/",
-            "separator"     => "-",
-            "lowercase"     => true,
-            "trim"          => true,
-        ]);
+            $slugifyGitLabName = new Slugify([
+                "regexp"        => "/([^A-Za-z0-9]|-_\. )+/",
+                "separator"     => " ",
+                "lowercase"     => false,
+                "trim"          => true,
+            ]);
+
+            $slugifyGitLabPath = new Slugify([
+                "regexp"        => "/([^A-Za-z0-9]|-_\.)+/",
+                "separator"     => "-",
+                "lowercase"     => true,
+                "trim"          => true,
+            ]);
+        } else {
+            $slugifyGitLabName = new Slugify([
+                "regexp"        => "/([^A-Za-z0-9_\.\(\)\- ])+/",
+                "separator"     => "",
+                "lowercase"     => false,
+                "trim"          => true,
+            ]);
+
+            $slugifyGitLabPath = new Slugify([
+                "regexp"        => "/([^A-Za-z0-9_\.\-])+/",
+                "separator"     => "-",
+                "lowercase"     => true,
+                "trim"          => true,
+            ]);
+        }
 
         // Convert LDAP group names into a format safe for GitLab's restrictions
         $ldapGroupsSafe = [];
@@ -1992,6 +2034,52 @@ class LdapSyncCommand extends Command
                     && str_starts_with(trim($gitLabGroup["description"]), "gitlab-ce-ldap-sync")
                 ) {
                     $descriptionMatches = true;
+                }
+
+                if (
+                    !$descriptionMatches
+                    && $this->adoptExistingGroups
+                    && $this->array_key_exists_i($gitLabGroupName, $ldapGroupsSafe)
+                ) {
+                    // Groups created before the description was written don't have it, so this puts it in place. Any
+                    // description already there is kept after it, as only the beginning of it is ever matched.
+                    $gitLabGroupDescription = isset($gitLabGroup["description"])
+                        ? trim($gitLabGroup["description"])
+                        : ""
+                    ;
+                    $groupDescription = "" !== $gitLabGroupDescription
+                        ? sprintf("gitlab-ce-ldap-sync %s\n%s", $gitLabGroupName, $gitLabGroupDescription)
+                        : sprintf("gitlab-ce-ldap-sync %s", $gitLabGroupName)
+                    ;
+
+                    $this->logger?->warning(sprintf(
+                        "Adopting GitLab group #%d \"%s\" [%s].",
+                        $gitLabGroupId,
+                        $gitLabGroupName,
+                        $gitLabGroupPath
+                    ));
+
+                    try {
+                        !$this->dryRun
+                            ? $gitLab->groups()->update($gitLabGroupId, ["description" => $groupDescription])
+                            : $this->logger?->warning("Operation skipped due to dry run.")
+                        ;
+                    } catch (\Exception $e) {
+                        $this->logger?->error(sprintf(
+                            "GitLab group #%d \"%s\" [%s] was not adopted: %s",
+                            $gitLabGroupId,
+                            $gitLabGroupName,
+                            $gitLabGroupPath,
+                            $e->getMessage()
+                        ), ["error" => $e]);
+
+                        if (!$this->continueOnFail) {
+                            throw $e;
+                        }
+                    }
+
+                    $descriptionMatches = true;
+                    $this->gitLabApiCoolDown();
                 }
 
                 if (!$descriptionMatches && $config["gitlab"]["options"]["ignoreOtherGitlabGroups"]) {

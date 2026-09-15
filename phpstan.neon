@@ -1,4 +1,11 @@
+includes:
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
+    - vendor/phpstan/phpstan-deprecation-rules/rules.neon
+
 parameters:
+    level: max
+    paths:
+        - src
     checkUninitializedProperties: true
-    checkImplicitMixed: true
+    reportUnmatchedIgnoredErrors: true
     treatPhpDocTypesAsCertain: false

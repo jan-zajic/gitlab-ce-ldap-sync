@@ -1,31 +1,31 @@
-# LDAP users and groups sync script for Gitlab-CE and Gitlab-EE
+# LDAP users and groups sync script for GitLab-CE and GitLab-EE
 
-This nifty little PHP-CLI tool will synchronise users and user groups from an LDAP server to Gitlab community edition instance(s). This also works on enterprise editions on the free tier, of which has identical functionality to the community edition.
+This nifty little PHP-CLI tool will synchronise users and user groups from an LDAP server to GitLab community edition instance(s). This also works on enterprise editions on the free tier, of which has identical functionality to the community edition.
 
-Though this functionality is available out of the box with (non-free) Gitlab enterprise edition the pricing model is completely infeasible for teams of hobbyists working on non-revenue based projects but need to use a centralised authentication base.
+Though this functionality is available out of the box with (non-free) GitLab enterprise edition the pricing model is completely infeasible for teams of hobbyists working on non-revenue based projects but need to use a centralised authentication base.
 
-As a bonus it can also do a light rake of LDAP users not currently in Gitlab, so those that haven't signed in for their first time can still have projects and permissions assigned to them. **This may make the tool unsuitable git Gitlab-EE as this would certainly impact its licensing fees!**
+As a bonus it can also do a light rake of LDAP users not currently in GitLab, so those that haven't signed in for their first time can still have projects and permissions assigned to them. **This may make the tool unsuitable git GitLab-EE as this would certainly impact its licensing fees!**
 
 ## **This tool has had basic community quality assurance.**
 
 **Use in production environment at your own risk.**
 
-Though all of this tool's features are now implemented, very limited testing has happened, so don't expect a perfect experience. You should therefore only use this on test Gitlab CE/EE instances, or if you must use this on your production environment, at the very least take a backup of your Gitlab data before using this.
+Though all of this tool's features are now implemented, very limited testing has happened, so don't expect a perfect experience. You should therefore only use this on test GitLab CE/EE instances, or if you must use this on your production environment, at the very least take a backup of your GitLab data before using this.
 
 Features implemented:
 
 * Reading users from LDAP
 * Reading groups from LDAP
-* Synchronising users to Gitlab
-* Synchronising groups to Gitlab
-* Synchronising Gitlab group memberships based on LDAP group memberships
+* Synchronising users to GitLab
+* Synchronising groups to GitLab
+* Synchronising GitLab group memberships based on LDAP group memberships
 
 Not implemented:
 
 * Sub-group handling
-* ~~SSH key importing *(in progress)*~~: No longer required: Gitlab has a [native configuration option](https://docs.gitlab.com/ee/administration/auth/ldap/#ldap-sync-configuration-settings) "sync_ssh_keys" to specify a user attribute to synchronise keys from.
+* ~~SSH key importing *(in progress)*~~: No longer required: GitLab has a [native configuration option](https://docs.gitlab.com/ee/administration/auth/ldap/#ldap-sync-configuration-settings) "sync_ssh_keys" to specify a user attribute to synchronise keys from.
 
-If in doubt use the dry run `-d` option to prevent writing to Gitlab first, combined with `-vv` to see exactly what would happen.
+If in doubt use the dry run `-d` option to prevent writing to GitLab first, combined with `-vv` to see exactly what would happen.
 
 **You have been warned!**
 
@@ -38,19 +38,19 @@ These instructions will get you a copy of the project up and running on your loc
 Requirements for running this tool from a management station:
 
 * Any system that can run PHP-CLI will do. (Even Windows.)
-* [PHP](https://www.php.net) version 8.1 or later: Available to most Linux distributions via `apt-get` or `yum`. You don't need anything web related, but you will need the command line interface.
+* [PHP](https://www.php.net) version 8.1 or later: Available to most Linux distributions via `apt-get` or `yum`/`dnf`. You don't need anything web related, but you will need the command line interface.
 * [PHP's LDAP functions](http://php.net/manual/en/book.ldap.php): Usually installed with PHP as standard, but the LDAP module/functions may not be enabled by default.
-* [Composer](https://getcomposer.org/): Available to most Linux distributions via `apt-get` or `yum`, or manually download it as `composer.phar` alongside this tool.
-* LDAP instance: Used for Gitlab's authentication. It can (likely) be Microsoft Active Directory, OpenLDAP, 389-DS (including FreeIPA), and any other LDAP system, though **most of my testing is with 389-DS (without FreeIPA)**.
-* [Gitlab community edition](https://about.gitlab.com/install/?version=ce) or [Gitlab community edition](https://about.gitlab.com/install/?version=ee) self-hosted: This must be configured to authenticate against an LDAP instance already.
+* [Composer](https://getcomposer.org/): Available to most Linux distributions via `apt-get` or `yum`/`dnf`, or manually download it as `composer.phar` alongside this tool.
+* LDAP instance: Used for GitLab's authentication. It can (likely) be Microsoft Active Directory, OpenLDAP, 389-DS (including FreeIPA), and any other LDAP system, though **most of my testing is with 389-DS (without FreeIPA)**.
+* [GitLab community edition](https://about.gitlab.com/install/?version=ce) or [GitLab community edition](https://about.gitlab.com/install/?version=ee) self-hosted: This must be configured to authenticate against an LDAP instance already.
 
 ## Installing
 
-Either checkout this project or download it in ZIP form and extract it somewhere safe. The configuration will later contain an LDAP password and Gitlab API secret keys, so do put some protection in place to ensure only you can access it.
+Either checkout this project or download it in ZIP form and extract it somewhere safe. The configuration will later contain an LDAP password and GitLab API secret keys, so do put some protection in place to ensure only you can access it.
 
-After this you will need to install PHP components delivered via [Composer](https://getcomposer.org/). To do this open a terminal and change the working directory to this tool's location.
+After this you will need to install PHP components delivered via [Composer](https://getcomposer.org/). To do this open a terminal and change the working directory to this tool's location. (Or add the `-d`/`--working-dir=` option to run from another working directory.)
 
-* If you have Composer installed as a system-wide application (e.g. via `apt-get` or `yum`) use command `composer install`.
+* If you have Composer installed as a system-wide application (e.g. via `apt-get` or `yum`/`dnf`) use command `composer install`.
 * If you have Composer manually downloaded residing as `composer.phar` alongside this tool use command `php composer.phar install`.
 
 ## Configuration
@@ -154,7 +154,7 @@ Default: "(objectClass=inetOrgPerson)"
 
 ##### userUniqueAttribute *(string|null)*
 
-Specify the attribute used to uniquely identify a user by their user name. Their values must be a simple name of which the user would typically type to login to Gitlab or any other application interfacing with the same directory.
+Specify the attribute used to uniquely identify a user by their user name. Their values must be a simple name of which the user would typically type to login to GitLab or any other application interfacing with the same directory.
 
 Default: "uid"
 
@@ -162,7 +162,7 @@ Default: "uid"
 
 By default, it is assumed that the **userUniqueAttribute** is a user name that can be used to unambiguously determine group membership of individual persons as well as being used for login credentials. If this is the case with your LDAP structure, set **userMatchAttribute** to be empty.
 
-If that is not the case, **userMatchAttribute** can be used to separate these two functions. Specify **userMatchAttribute** to the feature of your user that determines his membership in a group and **userUniqueAttribute** to the user name attribute used for Gitlab login credentials. For instance, in some Microsoft Active Directory versions, groups possess a "member" attribute that lists the "distinguishedName" attributes of each member of the group. The user name however is a different attribute of each user being attributed to that group. In this case, set **userMatchAttribute** to "distinguishedName" and **userUniqueAttribute** to your user name attribute.
+If that is not the case, **userMatchAttribute** can be used to separate these two functions. Specify **userMatchAttribute** to the feature of your user that determines his membership in a group and **userUniqueAttribute** to the user name attribute used for GitLab login credentials. For instance, in some Microsoft Active Directory versions, groups possess a "member" attribute that lists the "distinguishedName" attributes of each member of the group. The user name however is a different attribute of each user being attributed to that group. In this case, set **userMatchAttribute** to "distinguishedName" and **userUniqueAttribute** to your user name attribute.
 
 This attribute only makes sense if **groupMemberAttribute** is "memberUid".
 
@@ -220,7 +220,7 @@ Default: "memberUid"
 
 ### gitlab
 
-This section configures how to communicate with your Gitlab-CE/EE instance.
+This section configures how to communicate with your GitLab-CE/EE instance.
 
 #### options
 
@@ -242,7 +242,7 @@ userNamesToIgnore:
     - "Guest"
 ```
 
-User name "root" will always be ignored because this is the built-in Gitlab root user. This tool will not attempt to create/delete/sync this user name.
+User name "root" will always be ignored because this is the built-in GitLab root user. This tool will not attempt to create/delete/sync this user name.
 
 Default: *null*
 
@@ -264,25 +264,25 @@ groupNamesToIgnore:
     - "Marketing Staff"
 ```
 
-Group names "Root" and "Users" will always be ignored because they are built-in Gitlab groups. This will will not attempt to create/delete/sync these group names.
+Group names "Root" and "Users" will always be ignored because they are built-in GitLab groups. This will will not attempt to create/delete/sync these group names.
 
 Default: *null*
 
 ##### createEmptyGroups *(bool|null)*
 
-Specify whether groups containing no LDAP users should still be created in Gitlab.
+Specify whether groups containing no LDAP users should still be created in GitLab.
 
-You should enable this if you want to specify permissions for groups in advance so they'll be ready when the first user is added to that group. If your directory has a lot of empty groups enabling this would only replicate the clutter to Gitlab, so should be used with care for large directories.
+You should enable this if you want to specify permissions for groups in advance so they'll be ready when the first user is added to that group. If your directory has a lot of empty groups enabling this would only replicate the clutter to GitLab, so should be used with care for large directories.
 
 Default: *false*
 
 ##### deleteExtraGroups *(bool|null)*
 
-Specify whether Gitlab groups not found in LDAP should be deleted.
+Specify whether GitLab groups not found in LDAP should be deleted.
 
-You should only enable this if you don't like empty groups being left over in Gitlab after doing a purge in your directory. Consider if such groups still contain projects you need to keep. (This scenario remains untested!)
+You should only enable this if you don't like empty groups being left over in GitLab after doing a purge in your directory. Consider if such groups still contain projects you need to keep. (This scenario remains untested!)
 
-Only empty Gitlab groups will ever be deleted. If there are extra groups with members still in them they will not be deleted.
+Only empty GitLab groups will ever be deleted. If there are extra groups with members still in them they will not be deleted.
 
 Default: *false*
 
@@ -296,7 +296,7 @@ The access level to provide users when added to groups.
 * 40: Maintainer
 * 50: Owner
 
-This will not interfere with existing group members, so you can adjust user permissions in Gitlab later on.
+This will not interfere with existing group members, so you can adjust user permissions in GitLab later on.
 
 Default: 30
 
@@ -304,7 +304,7 @@ Default: 30
 
 Specify a list of group names of which members should be granted administrator access.
 
-This varies not only according to which directory software you're using, but also how your directory has been structured. Users that have directory administrator access may not necessarily have Gitlab administrator access too, so this one is up to you.
+This varies not only according to which directory software you're using, but also how your directory has been structured. Users that have directory administrator access may not necessarily have GitLab administrator access too, so this one is up to you.
 
 * For Microsoft Active Directory this is could be "Domain Admins" and "Enterprise Admins".
 * OpenLDAP and 389-DS do not ship with such a group out of the box as they typically offer a "Directory Administrator" non-user object or similar for administrative purposes via bind DN.
@@ -340,23 +340,23 @@ Default: *null*
 
 #### instances *(array)*
 
-Declare one or more Gitlab instances to sync with. Each array key represents the instance name, which can be used later on to only sync with a particular instance (out of multiple) when running this tool.
+Declare one or more GitLab instances to sync with. Each array key represents the instance name, which can be used later on to only sync with a particular instance (out of multiple) when running this tool.
 
 ##### your-instance-name-here *(array)*
 
-Make up an instance name. For example if you had multiple Gitlab installations on servers named "Athena" and "Demeter" it would be sensible to tag them as "athena" and "demeter" in your configuration. All sub-sections of this configuration will be repeated for each instance.
+Make up an instance name. For example if you had multiple GitLab installations on servers named "Athena" and "Demeter" it would be sensible to tag them as "athena" and "demeter" in your configuration. All sub-sections of this configuration will be repeated for each instance.
 
 ###### url *(string)*
 
-Specify the full HTTP/HTTPS URL to this Gitlab instance, e.g. "https://athena.gitlab.example.com" or "https://demeter.gitlab.example.com". This is the same URL you use to really visit this Gitlab installation from your web browser.
+Specify the full HTTP/HTTPS URL to this GitLab instance, e.g. "<https://athena.gitlab.example.com>" or "<https://demeter.gitlab.example.com>". This is the same URL you use to really visit this GitLab installation from your web browser.
 
 ###### token *(string)*
 
-Specify an API token (usually a personal token or impersonation token) this tool can use to interface with the Gitlab instance's API. This token will need to have the "api" and "sudo" flags available.
+Specify an API token (usually a personal token or impersonation token) this tool can use to interface with the GitLab instance's API. This token will need to have the "api" and "sudo" flags available.
 
 ###### ldapServerName *(string)*
 
-Specify the LDAP server name used by this Gitlab instance. You can find this in the "ldap_servers" section of the "gitlab.rb" configuration file, which represents an array of data specifying how to interface with LDAP such as server host address, bind DN, encryption, base, etc.
+Specify the LDAP server name used by this GitLab instance. You can find this in the "ldap_servers" section of the "gitlab.rb" configuration file, which represents an array of data specifying how to interface with LDAP such as server host address, bind DN, encryption, base, etc.
 
 **You may need to put "ldap" before this value!** This hasn't been tested across different installation types, but using the Omnibus package it appears if your "gitlab.rb" has the following...
 
@@ -380,7 +380,7 @@ php bin/console ldap:sync -d
 
 Depending on your system's PHP installation you may need to use `php-cli` instead of `php`. (This typically only occurs on WHM/cPanel based servers configured to host PHP via the fast process manager, PHP-FPM.)
 
-**The `-d` option is important for your first run.** This enables "dry run" mode, meaning no changes will be persisted to your Gitlab instances. After running this tool you should evaluate the changes that will be made based on the output, then run it again without the `-d` option to persist the changes.
+**The `-d` option is important for your first run.** This enables "dry run" mode, meaning no changes will be persisted to your GitLab instances. After running this tool you should evaluate the changes that will be made based on the output, then run it again without the `-d` option to persist the changes.
 
 If you'd like to see more verbose output you can add up to 3 `-v` switches, for example:
 
@@ -390,7 +390,7 @@ php bin/console ldap:sync -vv
 php bin/console ldap:sync -vvv
 ```
 
-If you'd like to only sync with a single Gitlab instance you can specify the name of it as per your configuration as an argument, for example:
+If you'd like to only sync with a single GitLab instance you can specify the name of it as per your configuration as an argument, for example:
 
 ```console
 php bin/console ldap:sync athena
@@ -410,10 +410,10 @@ PHP source code must comply with [PHP-FIG PSRs](https://www.php-fig.org/psr/) 1,
 
 ### Potential features
 
-* Specifying an attribute on the LDAP user in which this script could write back a user ID for each Gitlab instance.
+* Specifying an attribute on the LDAP user in which this script could write back a user ID for each GitLab instance.
   * This would mean user name (UID) changes in LDAP could be detected and synchronised automatically without user duplication happening.
   * It would likely be a string attribute in the form of `instanceName:userId`, for example `athena:3` and `demeter:15`.
-  * It could either be a multi-value attribute to handle multiple Gitlab instances, or a single-value attribute split by a semi-colon, for example `athena:3;demeter:15`.
+  * It could either be a multi-value attribute to handle multiple GitLab instances, or a single-value attribute split by a semi-colon, for example `athena:3;demeter:15`.
 * Likely the same as the above but for groups too. (Group renaming.)
 
 ## Versioning

@@ -313,6 +313,16 @@ Enable this if your GitLab instance still has groups named in the old style, as 
 
 Default: *false*
 
+##### ignoreMembersAddedByOthers *(bool|null)*
+
+Specify whether group members added by somebody else should be left in place.
+
+Normally any group member of which isn't in the directory group is deleted. With this enabled only members added by the GitLab user this tool authenticates as are deleted, so memberships granted by hand stay untouched. GitLab records who added each member, shown in its group members page as "Direct member by *somebody*", and reports it in the API as `created_by`.
+
+Members of which GitLab doesn't record an author for, such as those added before it began recording this, are kept and reported as a warning.
+
+Default: *false*
+
 ##### newMemberAccessLevel *(integer|null)*
 
 The access level to provide users when added to groups.

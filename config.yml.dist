@@ -40,6 +40,7 @@ gitlab:
         deleteExtraGroups:              false
         ignoreOtherGitlabGroups:        false
         legacyGroupNameSlugs:           false
+        ignoreMembersAddedByOthers:     false
         newMemberAccessLevel:           30
 
         groupNamesOfAdministrators:     []

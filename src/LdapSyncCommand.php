@@ -61,6 +61,7 @@ use Symfony\Component\Yaml\Yaml;
  *          deleteExtraGroups: bool,
  *          ignoreOtherGitlabGroups: bool,
  *          legacyGroupNameSlugs: bool,
+ *          ignoreMembersAddedByOthers: bool,
  *          newMemberAccessLevel: int,
  *          groupNamesOfAdministrators: non-empty-string[],
  *          groupNamesOfExternal: non-empty-string[],
@@ -132,6 +133,30 @@ use Symfony\Component\Yaml\Yaml;
  *  sign_in_count: int,
  *  namespace_id: int,
  *  created_by: ?string,
+ * }
+ *
+ * @phpstan-type GitLabGroupMemberArray array{
+ *  id: int,
+ *  username: string,
+ *  name: string,
+ *  state: string,
+ *  locked?: bool,
+ *  avatar_url: ?string,
+ *  web_url: string,
+ *  created_at: string,
+ *  created_by?: ?array{
+ *      id: int,
+ *      username: string,
+ *      name: string,
+ *      state: string,
+ *      avatar_url: ?string,
+ *      web_url: string,
+ *  },
+ *  expires_at: ?string,
+ *  access_level: int,
+ *  email?: ?string,
+ *  is_using_seat?: bool,
+ *  membership_state?: string,
  * }
  *
  * @phpstan-type GitLabGroupArray array{
@@ -809,6 +834,19 @@ class LdapSyncCommand extends Command
                     $config["gitlab"]["options"]["legacyGroupNameSlugs"] = false;
                 } elseif (!is_bool($config["gitlab"]["options"]["legacyGroupNameSlugs"])) {
                     $addProblem("error", "gitlab->options->legacyGroupNameSlugs is not a boolean.");
+                }
+
+                if (!isset($config["gitlab"]["options"]["ignoreMembersAddedByOthers"])) {
+                    $addProblem("warning", "gitlab->options->ignoreMembersAddedByOthers missing. (Assuming false.)");
+                    $config["gitlab"]["options"]["ignoreMembersAddedByOthers"] = false;
+                } elseif ("" === $config["gitlab"]["options"]["ignoreMembersAddedByOthers"]) {
+                    $addProblem(
+                        "warning",
+                        "gitlab->options->ignoreMembersAddedByOthers not specified. (Assuming false.)"
+                    );
+                    $config["gitlab"]["options"]["ignoreMembersAddedByOthers"] = false;
+                } elseif (!is_bool($config["gitlab"]["options"]["ignoreMembersAddedByOthers"])) {
+                    $addProblem("error", "gitlab->options->ignoreMembersAddedByOthers is not a boolean.");
                 }
 
                 if (!isset($config["gitlab"]["options"]["newMemberAccessLevel"])) {
@@ -1592,6 +1630,37 @@ class LdapSyncCommand extends Command
         $gitLab = new \Gitlab\Client();
         $gitLab->setUrl($gitLabConfig["url"]);
         $gitLab->authenticate($gitLabConfig["token"], \Gitlab\Client::AUTH_HTTP_TOKEN);
+
+        // Memberships record who added them, so this is needed to tell this tool's own memberships from anybody else's.
+        $gitLabCurrentUserId = 0;
+        $gitLabCurrentUserName = "";
+
+        try {
+            $gitLabCurrentUser = $gitLab->users()->me();
+
+            if (is_array($gitLabCurrentUser) && isset($gitLabCurrentUser["id"], $gitLabCurrentUser["username"])) {
+                $gitLabCurrentUserId = is_int($gitLabCurrentUser["id"]) ? $gitLabCurrentUser["id"] : 0;
+                $gitLabCurrentUserName = is_string($gitLabCurrentUser["username"])
+                    ? trim($gitLabCurrentUser["username"])
+                    : ""
+                ;
+            }
+        } catch (\Exception $e) {
+            $this->logger?->warning(sprintf("Couldn't determine the GitLab user: %s", $e->getMessage()), ["error" => $e]);
+        }
+
+        if ($gitLabCurrentUserId > 0) {
+            $this->logger?->notice(sprintf(
+                "Connected to GitLab as user #%d \"%s\".",
+                $gitLabCurrentUserId,
+                $gitLabCurrentUserName
+            ));
+        } elseif ($config["gitlab"]["options"]["ignoreMembersAddedByOthers"]) {
+            $this->logger?->error(
+                "Config gitlab->options->ignoreMembersAddedByOthers is enabled, but the GitLab user of this connection"
+                    . " couldn't be determined, so no group members will be deleted."
+            );
+        }
 
         // << Handle users
         /**
@@ -2459,6 +2528,9 @@ class LdapSyncCommand extends Command
                 "updateNum" => 0,
             ];
 
+            /** @var array<int, array{id: int, username: string}> $userGroupMembersAddedBy */
+            $userGroupMembersAddedBy = [];
+
             // Find existing group members
             $this->logger?->notice("Finding existing group members...");
             $p = 0;
@@ -2467,7 +2539,7 @@ class LdapSyncCommand extends Command
                 "page" => ++$p,
                 "per_page" => 100,
             ])) && [] !== $gitLabUsers) {
-                /** @var array<int, GitLabUserArray> $gitLabUsers */
+                /** @var array<int, GitLabGroupMemberArray> $gitLabUsers */
                 foreach ($gitLabUsers as $i => $gitLabUser) {
                     $n = $i + 1;
 
@@ -2525,6 +2597,16 @@ class LdapSyncCommand extends Command
                     }
 
                     $userGroupMembersSync["found"][$gitLabUserId] = $gitLabUserName;
+
+                    if (
+                        isset($gitLabUser["created_by"]["id"], $gitLabUser["created_by"]["username"])
+                        && is_int($gitLabUser["created_by"]["id"])
+                    ) {
+                        $userGroupMembersAddedBy[$gitLabUserId] = [
+                            "id"        => $gitLabUser["created_by"]["id"],
+                            "username"  => trim(strval($gitLabUser["created_by"]["username"])),
+                        ];
+                    }
                 }
             }
 
@@ -2602,6 +2684,34 @@ class LdapSyncCommand extends Command
                 if ($this->in_array_i($gitLabUserName, $config["gitlab"]["options"]["userNamesToIgnore"])) {
                     $this->logger?->info(sprintf("User \"%s\" in ignore list.", $gitLabUserName));
                     continue;
+                }
+
+                if ($config["gitlab"]["options"]["ignoreMembersAddedByOthers"]) {
+                    if (!isset($userGroupMembersAddedBy[$gitLabUserId])) {
+                        $this->logger?->warning(sprintf(
+                            "Not deleting user #%d \"%s\" from group #%d \"%s\" [%s]: GitLab doesn't say who added"
+                                . " them.",
+                            $gitLabUserId,
+                            $gitLabUserName,
+                            $gitLabGroupId,
+                            $gitLabGroupName,
+                            $gitLabGroupPath
+                        ));
+                        continue;
+                    }
+
+                    if ($userGroupMembersAddedBy[$gitLabUserId]["id"] !== $gitLabCurrentUserId) {
+                        $this->logger?->info(sprintf(
+                            "Not deleting user #%d \"%s\" from group #%d \"%s\" [%s]: Added by \"%s\".",
+                            $gitLabUserId,
+                            $gitLabUserName,
+                            $gitLabGroupId,
+                            $gitLabGroupName,
+                            $gitLabGroupPath,
+                            $userGroupMembersAddedBy[$gitLabUserId]["username"]
+                        ));
+                        continue;
+                    }
                 }
 
                 $this->logger?->info(sprintf(

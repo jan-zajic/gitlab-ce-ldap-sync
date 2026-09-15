@@ -2027,6 +2027,18 @@ class LdapSyncCommand extends Command
                     $this->logger?->warning(sprintf("Group \"%s\" in built-in reserved list.", $gitLabGroupName));
                     continue;
                 }
+
+                // GitLab renames a group of which is scheduled for deletion, so it no longer matches its directory
+                // group, and won't accept changes to it either.
+                if (1 === preg_match("/-deletion_scheduled-\d+$/", $gitLabGroupPath)) {
+                    $this->logger?->info(sprintf(
+                        "GitLab group #%d \"%s\" [%s] is scheduled for deletion, ignoring.",
+                        $gitLabGroupId,
+                        $gitLabGroupName,
+                        $gitLabGroupPath
+                    ));
+                    continue;
+                }
                 
                 $descriptionMatches = false;
                 if (
@@ -2396,17 +2408,19 @@ class LdapSyncCommand extends Command
 
             $gitLabGroupPath = $slugifyGitLabPath->slugify($gitLabGroupName);
 
+            if (!isset($ldapGroupsSafe[$gitLabGroupName]) || !is_array($ldapGroupsSafe[$gitLabGroupName])) {
+                // Without a directory group to compare against every member would look extra, so leave them alone.
+                $this->logger?->warning(sprintf(
+                    "Group \"%s\" [%s] doesn't appear to exist in the directory, so its members are left alone. (Is"
+                        . " this a sub-group? Sub-groups are not supported yet.)",
+                    $gitLabGroupName,
+                    $gitLabGroupPath
+                ));
+                continue;
+            }
+
             $membersOfThisGroup = [];
             foreach ($usersToSyncMembership as $gitLabUserId => $gitLabUserName) {
-                if (!isset($ldapGroupsSafe[$gitLabGroupName]) || !is_array($ldapGroupsSafe[$gitLabGroupName])) {
-                    $this->logger?->warning(sprintf(
-                        "Group \"%s\" doesn't appear to exist at path \"%s\". (Is this a sub-group? Sub-groups are not supported yet.)",
-                        $gitLabGroupName,
-                        $gitLabGroupPath
-                    ));
-                    continue;
-                }
-
                 if (!$this->in_array_i($gitLabUserName, $ldapGroupsSafe[$gitLabGroupName])) {
                     continue;
                 }
@@ -2600,11 +2614,32 @@ class LdapSyncCommand extends Command
                 ));
                 $gitLabGroupMember = null;
 
-                /** @var GitLabGroupArray|null $gitLabUser */
-                !$this->dryRun
-                    ? ($gitLabGroup = $gitLab->groups()->removeMember($gitLabGroupId, $gitLabUserId))
-                    : $this->logger?->warning("Operation skipped due to dry run.")
-                ;
+                try {
+                    /** @var GitLabGroupArray|null $gitLabUser */
+                    !$this->dryRun
+                        ? ($gitLabGroup = $gitLab->groups()->removeMember($gitLabGroupId, $gitLabUserId))
+                        : $this->logger?->warning("Operation skipped due to dry run.")
+                    ;
+                } catch (\Exception $e) {
+                    // GitLab refuses this for a group's last owner, amongst other reasons, and doesn't say which
+                    // member it was.
+                    $this->logger?->error(sprintf(
+                        "User #%d \"%s\" was not deleted from group #%d \"%s\" [%s]: %s",
+                        $gitLabUserId,
+                        $gitLabUserName,
+                        $gitLabGroupId,
+                        $gitLabGroupName,
+                        $gitLabGroupPath,
+                        $e->getMessage()
+                    ), ["error" => $e]);
+
+                    if (!$this->continueOnFail) {
+                        throw $e;
+                    }
+
+                    $this->gitLabApiCoolDown();
+                    continue;
+                }
 
                 $userGroupMembersSync["extra"][$gitLabUserId] = $gitLabUserName;
 

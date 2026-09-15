@@ -288,6 +288,16 @@ Only empty GitLab groups will ever be deleted. If there are extra groups with me
 
 Default: *false*
 
+##### ignoreOtherGitlabGroups *(bool|null)*
+
+Specify whether GitLab groups not created by this tool should be left alone entirely.
+
+Groups created by this tool are given a description beginning with "gitlab-ce-ldap-sync". When this setting is enabled any group without such a description is skipped: it will never be updated, have its members synchronised, or be deleted. Enable this if your GitLab instance also has groups maintained by hand, of which happen to share a name with a directory group.
+
+Beware that groups created before this setting existed do not have that description, so they will be treated as manually created groups. As this tool would then attempt to create them again GitLab will fail the run with "path has already been taken", hence such groups need their description amending first.
+
+Default: *false*
+
 ##### newMemberAccessLevel *(integer|null)*
 
 The access level to provide users when added to groups.

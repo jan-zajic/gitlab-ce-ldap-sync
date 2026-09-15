@@ -38,6 +38,7 @@ gitlab:
 
         createEmptyGroups:              false
         deleteExtraGroups:              false
+        ignoreOtherGitlabGroups:        false
         newMemberAccessLevel:           30
 
         groupNamesOfAdministrators:     []

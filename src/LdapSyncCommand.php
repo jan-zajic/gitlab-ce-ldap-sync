@@ -2075,10 +2075,40 @@ class LdapSyncCommand extends Command
             /** @var GitLabGroupArray|null $gitLabUser */
             $groupDescription = sprintf("gitlab-ce-ldap-sync %s", $ldapGroupName);
 
-            !$this->dryRun
-                ? ($gitLabGroup = $gitLab->groups()->create($gitLabGroupName, $gitLabGroupPath, $groupDescription))
-                : $this->logger?->warning("Operation skipped due to dry run.")
-            ;
+            try {
+                !$this->dryRun
+                    ? ($gitLabGroup = $gitLab->groups()->create(
+                        $gitLabGroupName,
+                        $gitLabGroupPath,
+                        $groupDescription
+                    ))
+                    : $this->logger?->warning("Operation skipped due to dry run.")
+                ;
+            } catch (\Exception $e) {
+                // GitLab doesn't say which group it was, so name it here.
+                $this->logger?->error(sprintf(
+                    "GitLab group \"%s\" [%s] was not created: %s",
+                    $gitLabGroupName,
+                    $gitLabGroupPath,
+                    $e->getMessage()
+                ), ["error" => $e]);
+
+                if (false !== stripos($e->getMessage(), "has already been taken")) {
+                    $this->logger?->error(sprintf(
+                        "A GitLab group of path \"%s\" already exists, but wasn't matched as an existing group. (If"
+                            . " config gitlab->options->ignoreOtherGitlabGroups is enabled, check that its description"
+                            . " begins with \"gitlab-ce-ldap-sync\".)",
+                        $gitLabGroupPath
+                    ));
+                }
+
+                if ($this->continueOnFail) {
+                    $this->gitLabApiCoolDown();
+                    continue;
+                }
+
+                throw $e;
+            }
 
             $gitLabGroupId = (is_array($gitLabGroup) && isset($gitLabGroup["id"]) && is_int($gitLabGroup["id"]))
                 ? $gitLabGroup["id"]

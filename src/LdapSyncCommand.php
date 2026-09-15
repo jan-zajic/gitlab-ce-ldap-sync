@@ -1987,11 +1987,20 @@ class LdapSyncCommand extends Command
                 }
                 
                 $descriptionMatches = false;
-                if (isset($gitlabGroup["description"]) && str_starts_with(trim($gitlabGroup["description"]), 'gitlab-ce-ldap-sync')) {
+                if (
+                    isset($gitLabGroup["description"])
+                    && str_starts_with(trim($gitLabGroup["description"]), "gitlab-ce-ldap-sync")
+                ) {
                     $descriptionMatches = true;
                 }
-                if(!$descriptionMatches && $config["gitlab"]["options"]["ignoreOtherGitlabGroups"]) {
-                    $this->logger?->warning(sprintf("Skipping non-matched Gitlab group %d \"%s\" [%s].", $gitlabGroupId, $gitlabGroupName, $gitlabGroupPath));
+
+                if (!$descriptionMatches && $config["gitlab"]["options"]["ignoreOtherGitlabGroups"]) {
+                    $this->logger?->warning(sprintf(
+                        "Skipping non-matched GitLab group #%d \"%s\" [%s].",
+                        $gitLabGroupId,
+                        $gitLabGroupName,
+                        $gitLabGroupPath
+                    ));
                     continue;
                 }
 
@@ -2064,10 +2073,10 @@ class LdapSyncCommand extends Command
             $gitLabGroup = null;
 
             /** @var GitLabGroupArray|null $gitLabUser */
-            $groupDescription = 'gitlab-ce-ldap-sync ' . $ldapGroupName;
-            
+            $groupDescription = sprintf("gitlab-ce-ldap-sync %s", $ldapGroupName);
+
             !$this->dryRun
-                ? ($gitLabGroup = $gitLab->groups()->create($gitLabGroupName, $gitLabGroupPath))
+                ? ($gitLabGroup = $gitLab->groups()->create($gitLabGroupName, $gitLabGroupPath, $groupDescription))
                 : $this->logger?->warning("Operation skipped due to dry run.")
             ;
 
